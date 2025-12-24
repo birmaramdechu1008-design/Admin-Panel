@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title> NMMS Admin Panel</title>
+  <title>🔥 NMMS Admin Panel</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
     * { box-sizing: border-box; }
@@ -155,11 +155,8 @@
       justify-content: space-between;
     }
     .item.new-key {
-      animation: highlight 1.5s ease;
-    }
-    @keyframes highlight {
-      0% { background: #ffc107; transform: scale(1.05); }
-      100% { background: #252525; transform: scale(1); }
+      box-shadow: 0 0 15px rgba(255, 193, 7, 0.4);
+      border: 1px solid #ffc107;
     }
     .position-selector {
       display: flex;
@@ -175,6 +172,21 @@
       color: #aaa;
       font-size: 0.85em;
       margin-left: 10px;
+    }
+
+    /* Loading Spinner */
+    .loader {
+      border: 4px solid #2d2d2d;
+      border-top: 4px solid #ffc107;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 20px auto;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
     }
 
     /* Modal Styles */
@@ -253,7 +265,7 @@
 </head>
 <body>
   <header>
-    <h1> NMMS Admin Panel</h1>
+    <h1>🔥 NMMS Admin Panel</h1>
     <div class="admin-info" id="adminInfo" style="display:none;">
       Logged in as: <span id="adminEmail"></span>
       <button class="logout-btn" id="logoutBtn">🚪 Logout</button>
@@ -264,6 +276,7 @@
     <div id="loginSection" class="card" style="text-align:center;">
       <h3>Admin Login</h3>
       <p>Sign in securely using your Google account</p>
+      <div class="loader" id="loginLoader" style="display:none;"></div>
       <button id="loginBtn">🔐 Sign in with Google</button>
     </div>
 
@@ -273,13 +286,15 @@
         <div>
           <input type="text" id="deviceId" placeholder="Device ID">
           <input type="text" id="key" placeholder="Key">
-          <input type="text" id="expiry" placeholder="Expiry (dd-mm-yyyy)">
+          <input type="text" id="expiry" placeholder="Expiry (dd-mm-yyyy)" value="01-01-2026">
           <input type="text" id="username" placeholder="User name">
           <label><input type="checkbox" id="allowOffline"> Allow Offline</label>
         </div>
         <div class="position-selector">
           <label>📍 Insert Position:</label>
-          <select id="insertPosition"></select>
+          <select id="insertPosition">
+            <option value="">-- Select Position --</option>
+          </select>
           <span id="positionInfo"></span>
         </div>
         <button id="saveBtn" class="save">💾 Save / Update</button>
@@ -308,35 +323,36 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js";
     import { getDatabase, ref, onValue, set, remove, get } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-database.js";
-    import { getAuth, signInWithPopup, GoogleAuthProvider, signOut } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js";
+    import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js";
 
     const firebaseConfig = {
-      apiKey: "AIzaSyBcw1EM3DNdesEJNltZJ8IDQJmuq0l4YNc",
-  authDomain: "users-f628d.firebaseapp.com",
-  databaseURL: "https://users-f628d-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "users-f628d",
-  storageBucket: "users-f628d.firebasestorage.app",
-  messagingSenderId: "522248780586",
-  appId: "1:522248780586:web:626380610768a1c5cf3c53",
-  measurementId: "G-P3NX39VPWH"
-};
+      apiKey: "AIzaSyA1FIDLD-AKVlEz-AJiweYVdxhIP0Rnijk",
+      authDomain: "opjat-2005.firebaseapp.com",
+      databaseURL: "https://opjat-2005-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "opjat-2005",
+      storageBucket: "opjat-2005.firebasestorage.app",
+      messagingSenderId: "2500552965",
+      appId: "1:2500552965:web:4f6664a366967a2525af6c"
+    };
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
     const auth = getAuth(app);
     const provider = new GoogleAuthProvider();
 
+    // Set persistence to LOCAL (survives browser close and page refresh)
+    setPersistence(auth, browserLocalPersistence);
+
     // Multiple admin emails allowed
     const ADMIN_EMAILS = [
-      
-      "rambirma248@gmail.com"
-      
+      "www.webomprakashjat@gmail.com"
     ];
 
     let currentUpdateId = null;
     let totalKeys = 0;
 
     const loginBtn = document.getElementById("loginBtn");
+    const loginLoader = document.getElementById("loginLoader");
     const loginSection = document.getElementById("loginSection");
     const mainPanel = document.getElementById("mainPanel");
     const dataList = document.getElementById("dataList");
@@ -353,27 +369,59 @@
       location.reload();
     };
 
+    // Check authentication state on page load
+    loginLoader.style.display = "block";
+    loginBtn.style.display = "none";
+
+    onAuthStateChanged(auth, (user) => {
+      loginLoader.style.display = "none";
+
+      if (user) {
+        // User is signed in
+        if (ADMIN_EMAILS.includes(user.email)) {
+          // Authorized admin
+          adminEmailSpan.textContent = user.email;
+          adminInfo.style.display = "block";
+          loginSection.style.display = "none";
+          mainPanel.style.display = "block";
+          loadData();
+        } else {
+          // Unauthorized user
+          accessDeniedModal.style.display = "block";
+          signOut(auth);
+        }
+      } else {
+        // User is signed out
+        loginBtn.style.display = "inline-block";
+        adminInfo.style.display = "none";
+        loginSection.style.display = "block";
+        mainPanel.style.display = "none";
+      }
+    });
+
     loginBtn.addEventListener("click", async () => {
       try {
+        loginLoader.style.display = "block";
+        loginBtn.style.display = "none";
+
         const result = await signInWithPopup(auth, provider);
         const user = result.user;
 
         // Check if user email is in the allowed admin emails list
         if (!ADMIN_EMAILS.includes(user.email)) {
-          // Show modal instead of alert
           accessDeniedModal.style.display = "block";
-
-          // Sign out the unauthorized user
           await signOut(auth);
+          loginLoader.style.display = "none";
+          loginBtn.style.display = "inline-block";
           return;
         }
 
-        adminEmailSpan.textContent = user.email;
-        adminInfo.style.display = "block";
-        loginSection.style.display = "none";
-        mainPanel.style.display = "block";
-        loadData();
+        // Login successful - onAuthStateChanged will handle UI updates
+
       } catch (err) {
+        loginLoader.style.display = "none";
+        loginBtn.style.display = "inline-block";
+
         if (err.code === 'auth/popup-closed-by-user') {
           console.log("Login popup closed by user");
         } else {
@@ -383,13 +431,33 @@
     });
 
     logoutBtn.addEventListener("click", async () => {
-      await signOut(auth);
-      alert("✅ Logged out successfully!");
-      location.reload();
+      if (confirm("क्या आप सच में logout करना चाहते हैं?")) {
+        await signOut(auth);
+        alert("✅ Logged out successfully!");
+        // onAuthStateChanged will handle UI updates
+      }
     });
 
-    function updatePositionDropdown(keysCount, isUpdate = false) {
-      insertPosition.innerHTML = "";
+    // Handle browser back button
+    window.addEventListener('popstate', function(event) {
+      // Close the app when back is pressed
+      if (confirm("क्या आप app से exit करना चाहते हैं?")) {
+        window.close();
+        // If window.close() doesn't work, try to navigate to about:blank
+        if (!window.closed) {
+          window.location.href = "about:blank";
+        }
+      } else {
+        // Push state back to prevent navigation
+        history.pushState(null, null, window.location.href);
+      }
+    });
+
+    // Add initial state to history
+    history.pushState(null, null, window.location.href);
+
+    function updatePositionDropdown(keysCount, isUpdate = false, currentPosition = null) {
+      insertPosition.innerHTML = '<option value="">-- Select Position --</option>';
       totalKeys = keysCount;
 
       const maxPosition = isUpdate ? keysCount : keysCount + 1;
@@ -401,10 +469,10 @@
         insertPosition.appendChild(option);
       }
 
-      if (maxPosition >= 3) {
-        insertPosition.value = "3";
+      if (isUpdate && currentPosition !== null) {
+        insertPosition.value = currentPosition;
       } else {
-        insertPosition.value = maxPosition;
+        insertPosition.value = "";
       }
 
       positionInfo.textContent = isUpdate ? `(Total ${keysCount} keys)` : `(Will be ${keysCount + 1} keys after adding)`;
@@ -456,7 +524,7 @@
             <p><b>Expiry:</b> ${item.expirydate}</p>
             <p><b>Offline:</b> ${item.Allowoffline}</p>
             <div class="btn-group">
-              <button class="update" onclick="updateItem('${item.id}')">✏️ Update</button>
+              <button class="update" onclick="updateItem('${item.id}', ${index + 1})">✏️ Update</button>
               <button class="danger" onclick="deleteItem('${item.id}')">🗑 Delete</button>
             </div>
           `;
@@ -478,6 +546,11 @@
         return;
       }
 
+      if (!insertPos || insertPos < 1) {
+        alert("⚠️ Please select a position!");
+        return;
+      }
+
       try {
         const isUpdate = currentUpdateId && currentUpdateId === id;
 
@@ -485,15 +558,64 @@
           const snapshot = await get(ref(db, id));
           const existingData = snapshot.val();
 
-          await set(ref(db, id), {
-            device_id: id,
-            key: key,
-            expirydate: expiry,
-            user: user,
-            Allowoffline: allow,
-            order: existingData?.order || 999999,
-            isNew: false
-          });
+          const snapshot2 = await get(ref(db, "/"));
+          const allData = snapshot2.val() || {};
+          const sortedItems = Object.keys(allData)
+            .map(itemId => ({
+              id: itemId,
+              ...allData[itemId],
+              order: allData[itemId].order || 999999
+            }))
+            .sort((a, b) => a.order - b.order);
+
+          const currentPos = sortedItems.findIndex(item => item.id === id) + 1;
+
+          if (currentPos !== insertPos) {
+            const itemToMove = sortedItems.find(item => item.id === id);
+            sortedItems.splice(currentPos - 1, 1);
+
+            itemToMove.device_id = id;
+            itemToMove.key = key;
+            itemToMove.expirydate = expiry;
+            itemToMove.user = user;
+            itemToMove.Allowoffline = allow;
+
+            sortedItems.splice(insertPos - 1, 0, itemToMove);
+
+            for (let i = 0; i < sortedItems.length; i++) {
+              const item = sortedItems[i];
+              await set(ref(db, item.id), {
+                device_id: item.device_id,
+                key: item.key,
+                expirydate: item.expirydate,
+                user: item.user,
+                Allowoffline: item.Allowoffline,
+                order: i + 1,
+                isNew: item.id === id ? true : false
+              });
+            }
+          } else {
+            await set(ref(db, id), {
+              device_id: id,
+              key: key,
+              expirydate: expiry,
+              user: user,
+              Allowoffline: allow,
+              order: existingData?.order || 999999,
+              isNew: true
+            });
+          }
+
+          setTimeout(async () => {
+            const currentSnapshot = await get(ref(db, id));
+            if (currentSnapshot.exists()) {
+              const currentData = currentSnapshot.val();
+              await set(ref(db, id), {
+                ...currentData,
+                isNew: false
+              });
+            }
+          }, 5000);
 
           alert("✅ Updated Successfully!");
           currentUpdateId = null;
@@ -544,16 +666,17 @@
                 isNew: false
               });
             }
-          }, 3000);
+          }, 5000);
 
           alert(`✅ New Key Added at Position #${insertPos}!`);
         }
 
         document.getElementById("deviceId").value = "";
         document.getElementById("key").value = "";
-        document.getElementById("expiry").value = "";
+        document.getElementById("expiry").value = "01-01-2026";
         document.getElementById("username").value = "";
         document.getElementById("allowOffline").checked = false;
+        document.getElementById("insertPosition").value = "";
 
       } catch (error) {
         console.error("Error saving data:", error);
@@ -597,7 +720,7 @@
       }
     };
 
-    window.updateItem = async (id) => {
+    window.updateItem = async (id, currentPos) => {
       currentUpdateId = id;
       const dbRef = ref(db, id);
 
@@ -614,7 +737,7 @@
 
           const allSnapshot = await get(ref(db, "/"));
           const allData = allSnapshot.val() || {};
-          updatePositionDropdown(Object.keys(allData).length, true);
+          updatePositionDropdown(Object.keys(allData).length, true, currentPos);
 
           window.scrollTo(0, 0);
         }
